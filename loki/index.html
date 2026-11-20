@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="referrer" content="no-referrer">
+<title>Loki</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/styles/github-dark.min.css">
+<script src="config.js"></script>
+<style>
+:root{--bg:#000;--side:#0c0c0e;--panel:#141417;--bubble:#1d1d21;--line:#232328;--text:#f1f1f3;--muted:#8d8d97;--accent:#fff;--blue:#7c5cff;--ok:#2ecc71;--bad:#ff5d5d}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:15.5px/1.55 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;overscroll-behavior:none}
+button{font:inherit;color:inherit}
+#app{display:flex;height:100dvh;overflow:hidden}
+/* sidebar */
+#side{width:280px;flex:none;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;transition:transform .22s ease;z-index:20}
+#side .top{padding:14px 12px 8px;display:flex;gap:8px;align-items:center}
+.brand{display:flex;align-items:center;gap:9px;font-weight:650;flex:1}
+.logo{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#7c5cff,#22d3ee);display:grid;place-items:center;font-weight:800;font-size:14px;color:#fff}
+.newbtn{display:flex;align-items:center;gap:8px;margin:4px 12px 10px;padding:10px 12px;border-radius:12px;background:var(--panel);border:1px solid var(--line);cursor:pointer;font-weight:550}
+.newbtn:hover{background:#1b1b1f}
+#side .scroll{flex:1;overflow-y:auto;padding:0 8px 16px}
+.sec{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:16px 8px 6px;display:flex;justify-content:space-between}
+.th{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:10px;cursor:pointer;font-size:14px;color:#d6d6db}
+.th:hover{background:#17171b}.th.on{background:#1f1f24;color:#fff}
+.th span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.th .x{opacity:0;border:0;background:none;color:var(--muted);cursor:pointer;padding:2px 4px}.th:hover .x,.th.on .x{opacity:1}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:9px 10px;margin:0 2px 7px;font-size:13.5px;display:flex;gap:8px;align-items:flex-start}
+.card span{flex:1;overflow-wrap:anywhere}.card small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.mini{border:0;background:none;color:var(--muted);cursor:pointer;padding:2px 4px;font-size:14px}
+.mini:hover{color:#fff}
+.empty-s{color:var(--muted);font-size:13px;padding:2px 10px}
+.set{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;font-size:14px;color:#d6d6db;gap:8px}
+select,input[type=time]{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:4px 6px;font:inherit;font-size:13px}
+#scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:15}
+/* main */
+#main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+header{display:flex;align-items:center;gap:8px;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top));border-bottom:1px solid transparent}
+header .title{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
+.ib{width:36px;height:36px;border-radius:10px;border:0;background:none;cursor:pointer;display:grid;place-items:center;color:#ddd}
+.ib:hover{background:#151518}
+.ib svg{width:20px;height:20px}
+.dot{width:8px;height:8px;border-radius:50%;background:#666;flex:none}.dot.on{background:var(--ok)}.dot.err{background:var(--bad)}
+#msgs{flex:1;overflow-y:auto;padding:8px 0 20px;scroll-behavior:smooth}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+.msg{margin:18px 0;display:flex;gap:12px}
+.msg.me{justify-content:flex-end}
+.msg.me .b{background:var(--bubble);border-radius:20px 20px 6px 20px;padding:9px 14px;max-width:85%;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.bot .av{flex:none;margin-top:2px}
+.msg.bot .b{flex:1;min-width:0;overflow-wrap:anywhere}
+.b p{margin:.35em 0}.b ul,.b ol{margin:.35em 0;padding-left:1.35em}.b li{margin:.15em 0}
+.b a{color:#b5a6ff;text-decoration:none}.b a:hover{text-decoration:underline}
+.b h1,.b h2,.b h3{font-size:1.06em;margin:.8em 0 .3em}
+.b code{background:#1e1e23;padding:1.5px 5px;border-radius:6px;font-size:13.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.b pre{position:relative;background:#0d0d10;border:1px solid var(--line);border-radius:12px;padding:12px;overflow-x:auto;margin:.6em 0}
+.b pre code{background:none;padding:0;font-size:13px}
+.copy{position:absolute;top:6px;right:6px;border:1px solid var(--line);background:#16161a;color:#bbb;border-radius:7px;font-size:11.5px;padding:2px 7px;cursor:pointer}
+.b table{border-collapse:collapse;font-size:14px}.b td,.b th{border:1px solid var(--line);padding:4px 8px}
+.b blockquote{border-left:3px solid #333;margin:.4em 0;padding-left:10px;color:#bbb}
+.media img{max-width:min(100%,420px);border-radius:14px;display:block;margin:6px 0;cursor:zoom-in}
+.file{display:inline-flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);padding:8px 12px;border-radius:12px;margin:6px 0;color:#fff;text-decoration:none}
+.tools{font-size:12px;color:var(--muted);margin-top:6px}
+.prog{color:var(--muted);font-size:13.5px;display:flex;align-items:center;gap:8px;min-height:22px}
+.dots{display:inline-flex;gap:4px}.dots i{width:6px;height:6px;border-radius:50%;background:#aaa;animation:bl 1.2s infinite}
+.dots i:nth-child(2){animation-delay:.18s}.dots i:nth-child(3){animation-delay:.36s}
+@keyframes bl{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+.appr{border:1px solid #3a3350;background:#141020;border-radius:14px;padding:12px;margin:8px 0}
+.appr pre{white-space:pre-wrap;background:#0c0a14;border:1px solid #2a2340;border-radius:10px;padding:8px;font-size:13px;margin:8px 0;max-height:200px;overflow:auto}
+.appr .row{display:flex;gap:8px}
+.appr button{flex:1;border:0;border-radius:10px;padding:9px;font-weight:600;cursor:pointer}
+.yes{background:#fff;color:#000}.no{background:#26262c;color:#fff}
+.appr.done button{display:none}
+.hero{max-width:760px;margin:12vh auto 0;padding:0 20px;text-align:center}
+.hero h1{font-size:28px;font-weight:650;margin:14px 0 6px;letter-spacing:-.01em}
+.hero p{color:var(--muted);margin:0 0 22px}
+.sugs{display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:left}
+.sug{border:1px solid var(--line);background:var(--side);border-radius:14px;padding:12px;font-size:14px;cursor:pointer;color:#ddd}
+.sug b{display:block;color:#fff;font-weight:600;margin-bottom:2px}
+.sug:hover{background:#121215}
+/* composer */
+.composer{padding:8px 12px calc(12px + env(safe-area-inset-bottom))}
+.box{max-width:760px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:26px;padding:8px 8px 8px 14px}
+.box textarea{width:100%;background:none;border:0;outline:none;color:var(--text);font:inherit;resize:none;max-height:180px;padding:6px 2px}
+.box .bar{display:flex;align-items:center;gap:4px}
+.box .bar .sp{flex:1}
+.send{width:36px;height:36px;border-radius:50%;border:0;background:#fff;color:#000;cursor:pointer;display:grid;place-items:center}
+.send:disabled{opacity:.3;cursor:default}
+.rec{color:var(--bad)!important;animation:pulse 1s infinite}@keyframes pulse{50%{opacity:.4}}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px}
+.chip{display:flex;align-items:center;gap:6px;background:#1c1c21;border-radius:10px;padding:4px 8px;font-size:12.5px}
+.chip img{height:42px;border-radius:8px}
+.note{font-size:11.5px;color:#666;text-align:center;margin-top:6px}
+#gate{position:fixed;inset:0;background:#000;display:none;align-items:center;justify-content:center;z-index:50;padding:24px;text-align:center}
+#gate .in{max-width:380px}#gate p{color:var(--muted)}
+#gate a{display:inline-block;margin-top:12px;background:#fff;color:#000;padding:10px 18px;border-radius:12px;text-decoration:none;font-weight:600}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:60}
+#lightbox img{max-width:96vw;max-height:92vh;border-radius:10px}
+@media (max-width: 860px){
+  #side{position:fixed;top:0;bottom:0;left:0;transform:translateX(-100%);width:84vw;max-width:320px;padding-top:env(safe-area-inset-top)}
+  #app.open #side{transform:none}#app.open #scrim{display:block}
+  .sugs{grid-template-columns:1fr}
+}
+@media (min-width: 861px){ #menuBtn{display:none} }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="top"><div class="brand"><div class="logo">L</div><span id="bname">Loki</span></div>
+      <button class="ib" id="closeSide" title="Tutup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button></div>
+    <div class="newbtn" id="newChat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Obrolan baru</div>
+    <div class="scroll">
+      <div class="sec">Obrolan</div><div id="threads"></div>
+      <div class="sec">🧠 Memori</div><div id="facts"></div>
+      <div class="sec">🔁 Rutinitas & pengingat</div><div id="rems"></div>
+      <div class="sec">⚙️ Pengaturan</div>
+      <div class="set">Balasan suara (Telegram)<select id="sVoice"><option value="auto">auto</option><option value="on">selalu</option><option value="off">mati</option></select></div>
+      <div class="set">Ingat otomatis<select id="sMem"><option value="1">nyala</option><option value="0">mati</option></select></div>
+      <div class="set">Briefing pagi<span><select id="sBrief"><option value="off">mati</option><option value="on">nyala</option></select> <input type="time" id="sBriefT" value="07:00"></span></div>
+      <div class="set" id="installRow" style="display:none">Pasang aplikasi<button class="mini" id="installBtn" style="color:#fff">📲 Pasang</button></div>
+      <div class="set"><span style="color:var(--muted);font-size:12px">Terhubung terenkripsi ujung-ke-ujung</span><button class="mini" id="logout" title="Lupakan kunci di perangkat ini">⎋</button></div>
+    </div>
+  </aside>
+  <div id="scrim"></div>
+  <main id="main">
+    <header>
+      <button class="ib" id="menuBtn" title="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
+      <div class="title" id="title">Loki</div><span class="dot" id="dot" title="status"></span>
+      <button class="ib" id="newChat2" title="Obrolan baru"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+    </header>
+    <div id="msgs"><div class="wrap" id="list"></div></div>
+    <div class="composer"><div class="box">
+      <div class="chips" id="chips"></div>
+      <textarea id="t" rows="1" placeholder="Tanya apa aja ke Loki…"></textarea>
+      <div class="bar">
+        <button class="ib" id="att" title="Lampirkan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.5l-8.5 8.5a5.5 5.5 0 01-7.8-7.8l9-9a3.7 3.7 0 015.2 5.2l-9 9a1.8 1.8 0 01-2.6-2.6l8.3-8.3"/></svg></button>
+        <input type="file" id="file" hidden>
+        <button class="ib" id="mic" title="Pesan suara"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
+        <span class="sp"></span>
+        <button class="send" id="s" disabled title="Kirim"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+      </div>
+    </div><div class="note">Loki bisa salah. Aksi berisiko selalu minta izinmu dulu.</div></div>
+  </main>
+</div>
+<div id="gate"><div class="in"><div class="logo" style="width:56px;height:56px;margin:auto;font-size:26px">L</div><h2 id="gateT">Buka lewat Telegram</h2><p id="gateP">Biar aman, Loki cuma bisa dibuka pemiliknya. Buka bot di Telegram lalu ketuk tombol <b>Buka Loki</b> (atau kirim /app).</p><a id="gateA" href="#">Buka @Lokixyz_bot</a></div></div>
+<div id="lightbox"><img id="lbimg"></div>
+<script>
+(() => {
+const CFG = window.LOKI_CONFIG, NTFY = CFG.NTFY;
+const tg = window.Telegram?.WebApp; const inTG = !!(tg && tg.initData);
+if (tg) { try { tg.ready(); tg.expand(); tg.setHeaderColor('#000000'); tg.setBackgroundColor('#000000'); tg.disableVerticalSwipes?.(); } catch (e) {} }
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder();
+const b64u = b => { let s = ''; const a = new Uint8Array(b); for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const unb64u = s => { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const r = atob(s), a = new Uint8Array(r.length); for (let i = 0; i < r.length; i++) a[i] = r.charCodeAt(i); return a; };
+const hex = h => new Uint8Array(h.match(/../g).map(x => parseInt(x, 16)));
+const sha = async (...parts) => { const bs = parts.map(p => typeof p === 'string' ? enc.encode(p) : p); const tot = bs.reduce((n, b, i) => n + b.length + (i ? 1 : 0), 0); const out = new Uint8Array(tot); let o = 0; bs.forEach((b, i) => { if (i) out[o++] = 124; out.set(b, o); o += b.length; }); return [...new Uint8Array(await crypto.subtle.digest('SHA-256', out))].map(x => x.toString(16).padStart(2, '0')).join(''); };
+const rid = () => Math.random().toString(36).slice(2, 10);
+
+// ---------- key handling
+const hp = new URLSearchParams(location.hash.slice(1));
+if (hp.get('k') && /^[0-9a-f]{64}$/.test(hp.get('k'))) { localStorage.setItem('loki_key', hp.get('k')); hp.delete('k'); history.replaceState(null, '', location.pathname + location.search + (hp.toString() ? '#' + hp : '')); }
+let KEY = null, UP = null, DOWN = null, es = null;
+async function useKey(khex) {
+  KEY = await crypto.subtle.importKey('raw', hex(khex), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  const kb = hex(khex); UP = 'loki_u_' + (await sha(kb, 'up')).slice(0, 24); DOWN = 'loki_d_' + (await sha(kb, 'down')).slice(0, 24);
+}
+async function aesEnc(key, obj) { const iv = crypto.getRandomValues(new Uint8Array(12)); const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(obj))); const out = new Uint8Array(12 + ct.byteLength); out.set(iv); out.set(new Uint8Array(ct), 12); return out; }
+async function aesDec(key, raw) { const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12) }, key, raw.slice(12)); return JSON.parse(dec.decode(pt)); }
+async function payload(ev) { if (ev.attachment) { const r = await fetch(ev.attachment.url); return new Uint8Array(await r.arrayBuffer()); } if ((ev.message || '').startsWith('L1.')) return unb64u(ev.message.slice(3)); return null; }
+async function publish(topic, raw) {
+  const body = 'L1.' + b64u(raw);
+  if (body.length <= 3900) return fetch(`${NTFY}/${topic}`, { method: 'POST', body });
+  return fetch(`${NTFY}/${topic}`, { method: 'PUT', body: raw, headers: { 'Filename': 'm.bin' } });
+}
+async function send(obj) { obj.ts = Date.now(); obj.nonce = rid() + rid(); const r = await publish(UP, await aesEnc(KEY, obj)); if (!r.ok) throw new Error('relay HTTP ' + r.status); }
+
+async function pair() {
+  const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+  const epk = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+  const box = await crypto.subtle.importKey('raw', unb64u(CFG.BOX_PUB), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const bits = await crypto.subtle.deriveBits({ name: 'ECDH', public: box }, kp.privateKey, 256);
+  const hk = await crypto.subtle.importKey('raw', bits, 'HKDF', false, ['deriveKey']);
+  const sk = await crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: enc.encode('loki-pair'), info: enc.encode('v1') }, hk, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  const bd = 'loki_bd_' + (await sha(epk)).slice(0, 20);
+  const boot = 'loki_b_' + (await sha(unb64u(CFG.BOX_PUB), 'boot')).slice(0, 24);
+  return new Promise((res, rej) => {
+    const s = new EventSource(`${NTFY}/${bd}/sse`); const to = setTimeout(() => { s.close(); rej(new Error('Server Loki tidak menjawab (mungkin lagi offline).')); }, 30000);
+    s.onopen = async () => { const ct = await aesEnc(sk, { initData: tg.initData, ts: Date.now(), nonce: rid() }); publish(boot, enc.encode(JSON.stringify({ epk: b64u(epk), ct: b64u(ct) }))); };
+    s.onmessage = async e => { try { const ev = JSON.parse(e.data); if (ev.event !== 'message') return; const m = await aesDec(sk, await payload(ev)); clearTimeout(to); s.close(); m.t === 'paired' ? res(m.key) : rej(new Error(m.reason || 'Pairing ditolak')); } catch (err) {} };
+  });
+}
+
+// ---------- UI state
+let ST = { threads: [], facts: [], reminders: [], history: [], settings: {} }, busy = false, pending = {}, attach = null, gotState = false;
+const list = $('list'), msgs = $('msgs');
+const md = s => { const h = DOMPurify.sanitize(marked.parse(s || '', { breaks: true, gfm: true }), { ADD_ATTR: ['target'] }); const d = document.createElement('div'); d.innerHTML = h;
+  d.querySelectorAll('pre code').forEach(c => { try { hljs.highlightElement(c); } catch (e) {} const b = document.createElement('button'); b.className = 'copy'; b.textContent = 'Salin'; b.onclick = () => { navigator.clipboard?.writeText(c.innerText); b.textContent = 'Tersalin'; setTimeout(() => b.textContent = 'Salin', 1200); }; c.parentElement.append(b); });
+  d.querySelectorAll('a').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; a.onclick = ev => { if (tg?.openLink && inTG) { ev.preventDefault(); tg.openLink(a.href); } }; }); return d; };
+const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+const scroll = () => requestAnimationFrame(() => msgs.scrollTop = msgs.scrollHeight);
+function setDot(c) { $('dot').className = 'dot ' + c; }
+
+function hero() {
+  list.innerHTML = `<div class="hero"><div class="logo" style="width:52px;height:52px;margin:auto;font-size:24px">L</div><h1>Ada yang bisa aku bantu?</h1><p>Aku bisa cari info, buka web, bikin file & gambar, ingetin kamu, dan jalanin tugas rutin.</p>
+  <div class="sugs">${[['Berita hari ini', 'Rangkum 5 berita utama Indonesia hari ini'], ['Cek harga', 'Harga bitcoin dan emas antam sekarang berapa?'], ['Bikin gambar', 'Bikin gambar kucing astronot gaya kartun'], ['Rutinitas', 'Tiap jam 7 pagi kirim cuaca Makassar dan berita teknologi']].map(([a, b]) => `<div class="sug" data-q="${esc(b)}"><b>${a}</b>${esc(b)}</div>`).join('')}</div></div>`;
+  list.querySelectorAll('.sug').forEach(x => x.onclick = () => { $('t').value = x.dataset.q; onInput(); submit(); });
+}
+function addMe(text, img) { list.querySelector('.hero')?.remove(); const m = document.createElement('div'); m.className = 'msg me'; m.innerHTML = `<div class="b">${img ? `<img src="${img}" style="max-width:220px;border-radius:12px;display:block;margin-bottom:6px">` : ''}${esc(text)}</div>`; list.append(m); scroll(); }
+function botShell(id) { list.querySelector('.hero')?.remove(); const m = document.createElement('div'); m.className = 'msg bot'; m.dataset.rid = id || ''; m.innerHTML = `<div class="av logo">L</div><div class="b"><div class="content"></div><div class="media"></div><div class="prog"><span class="dots"><i></i><i></i><i></i></span><span class="pt"></span></div></div>`; list.append(m); scroll(); return m; }
+function addBot(text, id, animate) {
+  const m = (id && list.querySelector(`.msg.bot[data-rid="${id}"]`)) || botShell(id); m.querySelector('.prog')?.remove();
+  const c = m.querySelector('.content');
+  if (!animate) { c.replaceChildren(md(text)); scroll(); return m; }
+  const words = text.split(/(\s+)/); let i = 0; const step = Math.max(2, Math.ceil(words.length / 60));
+  const tick = () => { i += step; c.replaceChildren(md(words.slice(0, i).join(''))); scroll(); if (i < words.length) setTimeout(tick, 16); else c.replaceChildren(md(text)); };
+  tick(); return m;
+}
+function renderHistory() { list.innerHTML = ''; if (!ST.history.length) return hero(); ST.history.forEach(h => h.role === 'user' ? addMe(h.text) : addBot(h.text)); }
+function renderSide() {
+  const cur = ST.current; $('bname').textContent = ST.name || 'Loki';
+  const t = ST.threads.find(x => x.id === cur); $('title').textContent = t ? t.title : 'Loki';
+  $('threads').innerHTML = ST.threads.map(x => `<div class="th ${x.id === cur ? 'on' : ''}" data-id="${x.id}"><span>${esc(x.title)}</span><button class="x" data-del="${x.id}" title="Hapus">✕</button></div>`).join('') || '<div class="empty-s">Belum ada</div>';
+  $('threads').querySelectorAll('.th').forEach(el => el.onclick = e => { if (e.target.dataset.del) { if (confirm('Hapus obrolan ini?')) send({ t: 'thread_delete', id: +e.target.dataset.del }); return; } send({ t: 'thread_switch', id: +el.dataset.id }); closeSide(); });
+  $('facts').innerHTML = ST.facts.map(f => `<div class="card"><span>${esc(f.fact)}</span><button class="mini" data-f="${f.id}">✕</button></div>`).join('') || '<div class="empty-s">Belum ada</div>';
+  $('facts').querySelectorAll('[data-f]').forEach(b => b.onclick = () => send({ t: 'fact_del', id: +b.dataset.f }));
+  $('rems').innerHTML = ST.reminders.map(r => `<div class="card"><span>${esc(r.message.slice(0, 120))}<small>${r.kind === 'task' ? '🤖 tugas' : '🔔 pesan'} · ${r.due}${r.recur ? ' · ' + esc(r.recur) : ''}${r.paused ? ' · ⏸ dijeda' : ''}</small></span>${r.recur ? `<button class="mini" data-p="${r.id}" data-v="${r.paused ? 0 : 1}" title="${r.paused ? 'Lanjut' : 'Jeda'}">${r.paused ? '▶' : '⏸'}</button>` : ''}<button class="mini" data-r="${r.id}">✕</button></div>`).join('') || '<div class="empty-s">Belum ada</div>';
+  $('rems').querySelectorAll('[data-r]').forEach(b => b.onclick = () => send({ t: 'rem_del', id: +b.dataset.r }));
+  $('rems').querySelectorAll('[data-p]').forEach(b => b.onclick = () => send({ t: 'rem_pause', id: +b.dataset.p, pause: b.dataset.v === '1' }));
+  const s = ST.settings || {}; $('sVoice').value = s.voice || 'auto'; $('sMem').value = s.auto_memory || '1';
+  $('sBrief').value = s.briefing && s.briefing !== 'off' ? 'on' : 'off'; if (s.briefing && s.briefing !== 'off') $('sBriefT').value = s.briefing.padStart(5, '0');
+}
+function media(m) {
+  const el = (list.querySelector(`.msg.bot[data-rid="${m.rid}"]`) || botShell(m.rid)).querySelector('.media');
+  if (m.kind === 'image') { const u = URL.createObjectURL(new Blob([unb64u(m.data.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''))], { type: m.mime })); const i = document.createElement('img'); i.src = u; i.alt = m.caption || ''; i.onclick = () => { $('lbimg').src = u; $('lightbox').style.display = 'flex'; }; el.append(i); }
+  else if (m.kind === 'file') { const u = URL.createObjectURL(new Blob([unb64u(m.data.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''))])); const a = document.createElement('a'); a.className = 'file'; a.href = u; a.download = m.name; a.textContent = '📎 ' + m.name; el.append(a); }
+  else { const d = document.createElement('div'); d.className = 'tools'; d.textContent = m.caption; el.append(d); }
+  scroll();
+}
+function approval(m) {
+  const host = (list.querySelector(`.msg.bot[data-rid="${m.rid}"]`) || botShell(m.rid)).querySelector('.media');
+  const c = document.createElement('div'); c.className = 'appr'; c.id = 'ap_' + m.aid;
+  c.innerHTML = `<b>🔐 Minta izin</b> <span style="color:var(--muted);font-size:13px">(${esc(m.reason)})</span><pre>${esc(m.summary)}</pre><div class="row"><button class="yes">Setuju</button><button class="no">Tolak</button></div><div class="res" style="font-size:13px;color:var(--muted)"></div>`;
+  c.querySelector('.yes').onclick = () => { send({ t: 'approve', aid: m.aid, yes: true }); c.classList.add('done'); c.querySelector('.res').textContent = '✅ Disetujui'; tg?.HapticFeedback?.notificationOccurred('success'); };
+  c.querySelector('.no').onclick = () => { send({ t: 'approve', aid: m.aid, yes: false }); c.classList.add('done'); c.querySelector('.res').textContent = '❌ Ditolak'; };
+  host.append(c); tg?.HapticFeedback?.notificationOccurred('warning'); scroll();
+}
+async function onEvent(m) {
+  if (m.t === 'state') { const first = !gotState; gotState = true; const switched = ST.current !== m.current; ST = m; renderSide(); if (first || switched) renderHistory(); setDot('on'); }
+  else if (m.t === 'progress') { const el = list.querySelector(`.msg.bot[data-rid="${m.rid}"] .pt`); if (el) el.textContent = m.text; }
+  else if (m.t === 'transcript') { const me = [...list.querySelectorAll('.msg.me .b')].pop(); if (me) me.textContent = '🎙️ ' + m.text; }
+  else if (m.t === 'reply') { addBot(m.text, m.rid, true); if (m.tools?.length) { const b = list.querySelector(`.msg.bot[data-rid="${m.rid}"] .b`); const d = document.createElement('div'); d.className = 'tools'; d.textContent = '🛠 ' + [...new Set(m.tools)].join(' · '); b.append(d); } done(m.rid); }
+  else if (m.t === 'media') media(m);
+  else if (m.t === 'approval') approval(m);
+  else if (m.t === 'error') { if (m.rid) { addBot('⚠️ ' + m.text, m.rid); done(m.rid); } else addBot('⚠️ ' + m.text); }
+}
+function done(id) { delete pending[id]; busy = Object.keys(pending).length > 0; onInput(); }
+
+function subscribe() {
+  if (es) es.close();
+  es = new EventSource(`${NTFY}/${DOWN}/sse`);
+  es.onopen = () => { setDot('on'); send({ t: 'hello' }).catch(() => setDot('err')); };
+  es.onerror = () => setDot('err');
+  es.onmessage = async e => { try { const ev = JSON.parse(e.data); if (ev.event !== 'message') return; const raw = await payload(ev); if (!raw) return; onEvent(await aesDec(KEY, raw)); } catch (err) { console.warn(err); } };
+}
+
+// ---------- composer
+const ta = $('t');
+function onInput() { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 180) + 'px'; $('s').disabled = busy || (!ta.value.trim() && !attach); }
+ta.addEventListener('input', onInput);
+ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !/Mobi|Android/i.test(navigator.userAgent)) { e.preventDefault(); submit(); } });
+$('s').onclick = submit;
+async function submit(extra) {
+  const text = ta.value.trim(); if ((!text && !attach && !extra) || busy) return;
+  const id = rid(); const msg = { t: 'chat', rid: id, text, thread: ST.current };
+  if (attach?.kind === 'image') { msg.image = attach.b64; msg.image_mime = attach.mime; }
+  if (attach?.kind === 'file') { msg.file = attach.b64; msg.file_name = attach.name; }
+  if (extra?.audio) msg.audio = extra.audio;
+  addMe(text || (extra?.audio ? '🎙️ (pesan suara)' : attach ? '📎 ' + attach.name : ''), attach?.kind === 'image' ? attach.url : null);
+  ta.value = ''; attach = null; $('chips').innerHTML = ''; busy = true; pending[id] = 1; onInput();
+  botShell(id); tg?.HapticFeedback?.impactOccurred('light');
+  try { await send(msg); } catch (e) { addBot('⚠️ Gagal kirim: ' + e.message, id); done(id); }
+  setTimeout(() => { if (pending[id]) { const p = list.querySelector(`.msg.bot[data-rid="${id}"] .pt`); if (p && !p.textContent) p.textContent = 'Masih kerja… (otak gratisan kadang lambat)'; } }, 25000);
+}
+$('att').onclick = () => $('file').click();
+$('file').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  if (f.type.startsWith('image/')) { const rd = new FileReader(); rd.onload = () => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); const k = Math.min(1, 1280 / Math.max(im.width, im.height)); c.width = im.width * k; c.height = im.height * k; c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); const url = c.toDataURL('image/jpeg', .82); attach = { kind: 'image', url, b64: url.split(',')[1], mime: 'image/jpeg', name: f.name }; chip(); }; im.src = rd.result; }; rd.readAsDataURL(f); }
+  else { if (f.size > 1400000) { alert('File maksimal ±1,4 MB lewat aplikasi. File lebih besar kirim lewat chat Telegram.'); return; } const rd = new FileReader(); rd.onload = () => { attach = { kind: 'file', b64: rd.result.split(',')[1], name: f.name }; chip(); }; rd.readAsDataURL(f); } };
+function chip() { $('chips').innerHTML = `<div class="chip">${attach.kind === 'image' ? `<img src="${attach.url}">` : '📎'} ${esc(attach.name)} <button class="mini" id="rmA">✕</button></div>`; $('rmA').onclick = () => { attach = null; $('chips').innerHTML = ''; onInput(); }; onInput(); }
+let rec = null;
+$('mic').onclick = async () => {
+  if (rec) { rec.stop(); return; }
+  try { const st = await navigator.mediaDevices.getUserMedia({ audio: true }); const chunks = []; rec = new MediaRecorder(st); rec.ondataavailable = e => chunks.push(e.data);
+    rec.onstop = async () => { st.getTracks().forEach(t => t.stop()); $('mic').classList.remove('rec'); rec = null; const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' }); if (blob.size > 1400000) { alert('Pesan suara kepanjangan'); return; } submit({ audio: b64u(await blob.arrayBuffer()).replace(/-/g, '+').replace(/_/g, '/') }); };
+    rec.start(); $('mic').classList.add('rec'); setTimeout(() => rec && rec.stop(), 60000);
+  } catch (e) { alert('Mikrofon tidak bisa dipakai di sini: ' + e.message); }
+};
+// sidebar & settings
+const openSide = () => $('app').classList.add('open'), closeSide = () => $('app').classList.remove('open');
+$('menuBtn').onclick = openSide; $('closeSide').onclick = closeSide; $('scrim').onclick = closeSide;
+const newChat = () => { send({ t: 'thread_new' }); gotState = false; closeSide(); hero(); };
+$('newChat').onclick = newChat; $('newChat2').onclick = newChat;
+$('sVoice').onchange = () => send({ t: 'setting', key: 'voice', value: $('sVoice').value });
+$('sMem').onchange = () => send({ t: 'setting', key: 'auto_memory', value: $('sMem').value });
+const brief = () => send({ t: 'setting', key: 'briefing', value: $('sBrief').value === 'on' ? $('sBriefT').value : 'off' });
+$('sBrief').onchange = brief; $('sBriefT').onchange = () => $('sBrief').value === 'on' && brief();
+$('logout').onclick = () => { if (confirm('Lupakan kunci Loki di perangkat ini?')) { localStorage.removeItem('loki_key'); location.reload(); } };
+$('lightbox').onclick = () => $('lightbox').style.display = 'none';
+let deferred = null; window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; $('installRow').style.display = 'flex'; });
+$('installBtn').onclick = () => deferred?.prompt();
+if ('serviceWorker' in navigator && !inTG) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+function gate(title, text) { $('gateT').textContent = title; $('gateP').innerHTML = text; $('gateA').href = 'https://t.me/' + CFG.BOT; $('gate').style.display = 'flex'; }
+(async function boot() {
+  if (!window.crypto?.subtle) return gate('Browser tidak didukung', 'Butuh HTTPS & browser modern.');
+  let k = localStorage.getItem('loki_key');
+  if (!k && inTG) { hero(); setDot(''); try { k = await pair(); localStorage.setItem('loki_key', k); } catch (e) { return gate('Gagal menyambung', esc(e.message)); } }
+  if (!k) return gate('Buka lewat Telegram', 'Biar aman, Loki cuma bisa dibuka pemiliknya. Buka bot di Telegram lalu ketuk <b>Buka Loki</b>, atau kirim <b>/app</b> lalu pilih <b>Pasang di HP</b>.');
+  await useKey(k); hero(); subscribe();
+  setTimeout(() => { if (!gotState) { setDot('err'); const p = document.createElement('div'); p.className = 'note'; p.style.margin = '20px'; p.textContent = 'Server Loki belum menjawab… kalau lama, mungkin lagi offline. Chat Telegram tetap bisa dipakai.'; list.append(p); } }, 15000);
+})();
+})();
+</script>
+</body>
+</html>
