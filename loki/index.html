@@ -270,7 +270,7 @@ function done(id) { delete pending[id]; busy = Object.keys(pending).length > 0; 
 function subscribe() {
   if (es) es.close();
   es = new EventSource(`${NTFY}/${DOWN}/sse`);
-  es.onopen = () => { setDot('on'); send({ t: 'hello' }).catch(() => setDot('err')); };
+  es.onopen = () => { setDot('on'); if (!gotState || !es._hello) { es._hello = 1; send({ t: 'hello' }).catch(() => setDot('err')); setTimeout(() => { if (!gotState) send({ t: 'hello' }); }, 6000); } };
   es.onerror = () => setDot('err');
   es.onmessage = async e => { try { const ev = JSON.parse(e.data); if (ev.event !== 'message') return; const raw = await payload(ev); if (!raw) return; onEvent(await aesDec(KEY, raw)); } catch (err) { console.warn(err); } };
 }
@@ -283,7 +283,7 @@ ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !/
 $('s').onclick = submit;
 async function submit(extra) {
   const text = ta.value.trim(); if ((!text && !attach && !extra) || busy) return;
-  const id = rid(); const msg = { t: 'chat', rid: id, text, thread: ST.current };
+  const id = rid(); const msg = { t: 'chat', rid: id, text }; if (gotState && ST.current) msg.thread = ST.current;
   if (attach?.kind === 'image') { msg.image = attach.b64; msg.image_mime = attach.mime; }
   if (attach?.kind === 'file') { msg.file = attach.b64; msg.file_name = attach.name; }
   if (extra?.audio) msg.audio = extra.audio;
@@ -309,7 +309,7 @@ $('mic').onclick = async () => {
 // sidebar & settings
 const openSide = () => $('app').classList.add('open'), closeSide = () => $('app').classList.remove('open');
 $('menuBtn').onclick = openSide; $('closeSide').onclick = closeSide; $('scrim').onclick = closeSide;
-const newChat = () => { send({ t: 'thread_new' }); gotState = false; closeSide(); hero(); };
+const newChat = () => { gotState = false; send({ t: 'thread_new' }); closeSide(); hero(); $('title').textContent = 'Obrolan baru'; const again = n => setTimeout(() => { if (!gotState && n) { send({ t: 'hello' }); again(n - 1); } }, 5000); again(3); };
 $('newChat').onclick = newChat; $('newChat2').onclick = newChat;
 $('sVoice').onchange = () => send({ t: 'setting', key: 'voice', value: $('sVoice').value });
 $('sMem').onchange = () => send({ t: 'setting', key: 'auto_memory', value: $('sMem').value });
