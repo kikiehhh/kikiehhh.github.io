@@ -7,8 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="referrer" content="no-referrer">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>Loki</title>
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="manifest.json?v=20261121c">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -16,7 +17,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/styles/github-dark.min.css">
-<script src="config.js"></script>
+<script src="config.js?v=20261121c"></script>
 <style>
 :root{--bg:#000;--side:#0c0c0e;--panel:#141417;--bubble:#1d1d21;--line:#232328;--text:#f1f1f3;--muted:#8d8d97;--accent:#fff;--blue:#7c5cff;--ok:#2ecc71;--bad:#ff5d5d}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -106,6 +107,10 @@ header .title{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-ove
 #gate a{display:inline-block;margin-top:12px;background:#fff;color:#000;padding:10px 18px;border-radius:12px;text-decoration:none;font-weight:600}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:60}
 #lightbox img{max-width:96vw;max-height:92vh;border-radius:10px}
+.banner{display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 12px;font-size:13.5px;background:#141020;border-bottom:1px solid #2a2340;color:#ddd;flex-wrap:wrap;text-align:center}
+.banner.ok{display:none}
+.banner.err{background:#201014;border-color:#4a2020;color:#ffb4b4}
+.banner button{background:#fff;color:#000;border:0;border-radius:8px;padding:5px 12px;font-weight:600;cursor:pointer}
 @media (max-width: 860px){
   #side{position:fixed;top:0;bottom:0;left:0;transform:translateX(-100%);width:84vw;max-width:320px;padding-top:env(safe-area-inset-top)}
   #app.open #side{transform:none}#app.open #scrim{display:block}
@@ -139,6 +144,7 @@ header .title{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-ove
       <div class="title" id="title">Loki</div><span class="dot" id="dot" title="status"></span>
       <button class="ib" id="newChat2" title="Obrolan baru"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
     </header>
+    <div id="banner"><span id="bannerT">Menyambungkan…</span><button type="button" id="bannerRetry" hidden>Coba lagi</button></div>
     <div id="msgs"><div class="wrap" id="list"></div></div>
     <div class="composer"><div class="box">
       <div class="chips" id="chips"></div>
@@ -164,17 +170,74 @@ const $ = id => document.getElementById(id);
 const enc = new TextEncoder(), dec = new TextDecoder();
 const b64u = b => { let s = ''; const a = new Uint8Array(b); for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
 const unb64u = s => { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const r = atob(s), a = new Uint8Array(r.length); for (let i = 0; i < r.length; i++) a[i] = r.charCodeAt(i); return a; };
-const hex = h => new Uint8Array(h.match(/../g).map(x => parseInt(x, 16)));
+const hex = h => { if (typeof h !== 'string' || !/^[0-9a-f]{64}$/i.test(h.trim())) throw new Error('kunci tidak valid'); return new Uint8Array(h.trim().match(/../g).map(x => parseInt(x, 16))); };
 const sha = async (...parts) => { const bs = parts.map(p => typeof p === 'string' ? enc.encode(p) : p); const tot = bs.reduce((n, b, i) => n + b.length + (i ? 1 : 0), 0); const out = new Uint8Array(tot); let o = 0; bs.forEach((b, i) => { if (i) out[o++] = 124; out.set(b, o); o += b.length; }); return [...new Uint8Array(await crypto.subtle.digest('SHA-256', out))].map(x => x.toString(16).padStart(2, '0')).join(''); };
 const rid = () => Math.random().toString(36).slice(2, 10);
+const isCryptoKey = k => !!(k && (k.type === 'secret' || (typeof CryptoKey !== 'undefined' && k instanceof CryptoKey)));
+
+// ---------- storage: memory first (Telegram WebView often blocks/clears localStorage)
+const STORE = 'loki_key';
+const mem = { key: null };
+function storages() { const o = []; try { if (window.localStorage) o.push(localStorage); } catch (e) {} try { if (window.sessionStorage) o.push(sessionStorage); } catch (e) {} return o; }
+function idb() { try { return indexedDB.open('loki', 1); } catch (e) { return null; } }
+function loadStoredKey() {
+  if (mem.key) return Promise.resolve(mem.key);
+  for (const s of storages()) { try { const v = s.getItem(STORE); if (/^[0-9a-f]{64}$/i.test(v || '')) { mem.key = v; return Promise.resolve(v); } if (v) s.removeItem(STORE); } catch (e) {} }
+  return new Promise(res => {
+    const req = idb(); if (!req) return res(null);
+    req.onerror = () => res(null);
+    req.onupgradeneeded = () => { try { req.result.createObjectStore('kv'); } catch (e) {} };
+    req.onsuccess = () => { try { const q = req.result.transaction('kv').objectStore('kv').get(STORE);
+      q.onsuccess = () => { const v = q.result; if (/^[0-9a-f]{64}$/i.test(v || '')) { mem.key = v; res(v); } else res(null); };
+      q.onerror = () => res(null); } catch (e) { res(null); } };
+  });
+}
+function saveStoredKey(v) {
+  mem.key = v;
+  for (const s of storages()) { try { s.setItem(STORE, v); } catch (e) {} }
+  const req = idb(); if (!req) return;
+  req.onupgradeneeded = () => { try { req.result.createObjectStore('kv'); } catch (e) {} };
+  req.onsuccess = () => { try { req.result.transaction('kv', 'readwrite').objectStore('kv').put(v, STORE); } catch (e) {} };
+}
+function clearStoredKey() {
+  mem.key = null;
+  for (const s of storages()) { try { s.removeItem(STORE); } catch (e) {} }
+  const req = idb(); if (!req) return;
+  req.onsuccess = () => { try { req.result.transaction('kv', 'readwrite').objectStore('kv').delete(STORE); } catch (e) {} };
+}
 
 // ---------- key handling
 const hp = new URLSearchParams(location.hash.slice(1));
-if (hp.get('k') && /^[0-9a-f]{64}$/.test(hp.get('k'))) { localStorage.setItem('loki_key', hp.get('k')); hp.delete('k'); history.replaceState(null, '', location.pathname + location.search + (hp.toString() ? '#' + hp : '')); }
-let KEY = null, UP = null, DOWN = null, es = null;
+if (hp.get('k') && /^[0-9a-f]{64}$/i.test(hp.get('k'))) {
+  saveStoredKey(hp.get('k')); hp.delete('k');
+  history.replaceState(null, '', location.pathname + location.search + (hp.toString() ? '#' + hp : ''));
+}
+let KEY = null, UP = null, DOWN = null, es = null, ready = false;
+async function importAes(raw) {
+  const alg = { name: 'AES-GCM', length: 256 };
+  const attempts = [
+    () => crypto.subtle.importKey('raw', raw, alg, false, ['encrypt', 'decrypt']),
+    () => crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']),
+    () => crypto.subtle.importKey('jwk', { kty: 'oct', k: b64u(raw), alg: 'A256GCM', ext: true }, alg, false, ['encrypt', 'decrypt']),
+  ];
+  let last;
+  for (const fn of attempts) {
+    try {
+      const key = await fn();
+      if (!isCryptoKey(key)) { last = new Error('importKey tidak mengembalikan CryptoKey'); continue; }
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode('ok'));
+      await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+      return key;
+    } catch (e) { last = e; }
+  }
+  throw last || new Error('WebCrypto tidak bisa memakai kunci AES');
+}
 async function useKey(khex) {
-  KEY = await crypto.subtle.importKey('raw', hex(khex), 'AES-GCM', false, ['encrypt', 'decrypt']);
-  const kb = hex(khex); UP = 'loki_u_' + (await sha(kb, 'up')).slice(0, 24); DOWN = 'loki_d_' + (await sha(kb, 'down')).slice(0, 24);
+  const kb = hex(khex);
+  KEY = await importAes(kb);
+  UP = 'loki_u_' + (await sha(kb, 'up')).slice(0, 24);
+  DOWN = 'loki_d_' + (await sha(kb, 'down')).slice(0, 24);
 }
 async function aesEnc(key, obj) { const iv = crypto.getRandomValues(new Uint8Array(12)); const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(obj))); const out = new Uint8Array(12 + ct.byteLength); out.set(iv); out.set(new Uint8Array(ct), 12); return out; }
 async function aesDec(key, raw) { const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12) }, key, raw.slice(12)); return JSON.parse(dec.decode(pt)); }
@@ -184,7 +247,12 @@ async function publish(topic, raw) {
   if (body.length <= 3900) return fetch(`${NTFY}/${topic}`, { method: 'POST', body });
   return fetch(`${NTFY}/${topic}`, { method: 'PUT', body: raw, headers: { 'Filename': 'm.bin' } });
 }
-async function send(obj) { obj.ts = Date.now(); obj.nonce = rid() + rid(); const r = await publish(UP, await aesEnc(KEY, obj)); if (!r.ok) throw new Error('relay HTTP ' + r.status); }
+async function send(obj) {
+  if (!isCryptoKey(KEY) || !UP) throw new Error('Koneksi belum siap. Ketuk Coba lagi.');
+  obj.ts = Date.now(); obj.nonce = rid() + rid();
+  const r = await publish(UP, await aesEnc(KEY, obj));
+  if (!r.ok) throw new Error('relay HTTP ' + r.status);
+}
 
 async function pair() {
   const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
@@ -196,7 +264,7 @@ async function pair() {
   const bd = 'loki_bd_' + (await sha(epk)).slice(0, 20);
   const boot = 'loki_b_' + (await sha(unb64u(CFG.BOX_PUB), 'boot')).slice(0, 24);
   return new Promise((res, rej) => {
-    const s = new EventSource(`${NTFY}/${bd}/sse`); const to = setTimeout(() => { s.close(); rej(new Error('Server Loki tidak menjawab (mungkin lagi offline).')); }, 30000);
+    const s = new EventSource(`${NTFY}/${bd}/sse`); const to = setTimeout(() => { s.close(); rej(new Error('Server Loki tidak menjawab (mungkin lagi offline).')); }, 45000);
     s.onopen = async () => { const ct = await aesEnc(sk, { initData: tg.initData, ts: Date.now(), nonce: rid() }); publish(boot, enc.encode(JSON.stringify({ epk: b64u(epk), ct: b64u(ct) }))); };
     s.onmessage = async e => { try { const ev = JSON.parse(e.data); if (ev.event !== 'message') return; const m = await aesDec(sk, await payload(ev)); clearTimeout(to); s.close(); m.t === 'paired' ? res(m.key) : rej(new Error(m.reason || 'Pairing ditolak')); } catch (err) {} };
   });
@@ -257,7 +325,7 @@ function approval(m) {
   host.append(c); tg?.HapticFeedback?.notificationOccurred('warning'); scroll();
 }
 async function onEvent(m) {
-  if (m.t === 'state') { gotState = true; const switched = ST.current !== m.current; ST = m; renderSide(); if (wantRender || (switched && !busy)) { wantRender = false; renderHistory(); } setDot('on'); }
+  if (m.t === 'state') { gotState = true; const switched = ST.current !== m.current; ST = m; renderSide(); if (wantRender || (switched && !busy)) { wantRender = false; renderHistory(); } showBanner('ok'); setReady(true); }
   else if (m.t === 'progress') { const el = list.querySelector(`.msg.bot[data-rid="${m.rid}"] .pt`); if (el) el.textContent = m.text; }
   else if (m.t === 'transcript') { const me = [...list.querySelectorAll('.msg.me .b')].pop(); if (me) me.textContent = '🎙️ ' + m.text; }
   else if (m.t === 'reply') { addBot(m.text, m.rid, true); if (m.tools?.length) { const b = list.querySelector(`.msg.bot[data-rid="${m.rid}"] .b`); const d = document.createElement('div'); d.className = 'tools'; d.textContent = '🛠 ' + [...new Set(m.tools)].join(' · '); b.append(d); } done(m.rid); }
@@ -271,18 +339,19 @@ function subscribe() {
   if (es) es.close();
   es = new EventSource(`${NTFY}/${DOWN}/sse`);
   es.onopen = () => { setDot('on'); if (!gotState || !es._hello) { es._hello = 1; send({ t: 'hello' }).catch(() => setDot('err')); setTimeout(() => { if (!gotState) send({ t: 'hello' }); }, 6000); } };
-  es.onerror = () => setDot('err');
+  es.onerror = () => { if (!gotState) { setDot('err'); showBanner('', 'Menyambungkan ulang…'); } };
   es.onmessage = async e => { try { const ev = JSON.parse(e.data); if (ev.event !== 'message') return; const raw = await payload(ev); if (!raw) return; onEvent(await aesDec(KEY, raw)); } catch (err) { console.warn(err); } };
 }
 
 // ---------- composer
 const ta = $('t');
-function onInput() { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 180) + 'px'; $('s').disabled = busy || (!ta.value.trim() && !attach); }
+function onInput() { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 180) + 'px'; $('s').disabled = !ready || busy || (!ta.value.trim() && !attach); }
 ta.addEventListener('input', onInput);
 ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !/Mobi|Android/i.test(navigator.userAgent)) { e.preventDefault(); submit(); } });
 $('s').onclick = submit;
 async function submit(extra) {
   const text = ta.value.trim(); if ((!text && !attach && !extra) || busy) return;
+  if (!ready || !isCryptoKey(KEY)) { showBanner('err', 'Belum tersambung ke Loki.'); return; }
   const id = rid(); const msg = { t: 'chat', rid: id, text }; if (gotState && ST.current) msg.thread = ST.current;
   if (attach?.kind === 'image') { msg.image = attach.b64; msg.image_mime = attach.mime; }
   if (attach?.kind === 'file') { msg.file = attach.b64; msg.file_name = attach.name; }
@@ -290,7 +359,13 @@ async function submit(extra) {
   addMe(text || (extra?.audio ? '🎙️ (pesan suara)' : attach ? '📎 ' + attach.name : ''), attach?.kind === 'image' ? attach.url : null);
   ta.value = ''; attach = null; $('chips').innerHTML = ''; busy = true; pending[id] = 1; onInput();
   botShell(id); tg?.HapticFeedback?.impactOccurred('light');
-  try { await send(msg); } catch (e) { addBot('⚠️ Gagal kirim: ' + e.message, id); done(id); }
+  try { await send(msg); } catch (e) {
+    const raw = String(e && e.message || e);
+    const friendly = /CryptoKey|SubtleCrypto|encrypt|kunci|belum siap/i.test(raw)
+      ? 'Belum tersambung dengan aman ke Loki. Ketuk Coba lagi.'
+      : ('Gagal kirim: ' + raw);
+    addBot('⚠️ ' + friendly, id); showBanner('err', friendly); done(id);
+  }
   setTimeout(() => { if (pending[id]) { const p = list.querySelector(`.msg.bot[data-rid="${id}"] .pt`); if (p && !p.textContent) p.textContent = 'Masih kerja… (otak gratisan kadang lambat)'; } }, 25000);
 }
 $('att').onclick = () => $('file').click();
@@ -315,21 +390,63 @@ $('sVoice').onchange = () => send({ t: 'setting', key: 'voice', value: $('sVoice
 $('sMem').onchange = () => send({ t: 'setting', key: 'auto_memory', value: $('sMem').value });
 const brief = () => send({ t: 'setting', key: 'briefing', value: $('sBrief').value === 'on' ? $('sBriefT').value : 'off' });
 $('sBrief').onchange = brief; $('sBriefT').onchange = () => $('sBrief').value === 'on' && brief();
-$('logout').onclick = () => { if (confirm('Lupakan kunci Loki di perangkat ini?')) { localStorage.removeItem('loki_key'); location.reload(); } };
+$('logout').onclick = () => { if (confirm('Lupakan kunci Loki di perangkat ini?')) { clearStoredKey(); location.reload(); } };
 $('lightbox').onclick = () => $('lightbox').style.display = 'none';
 let deferred = null; window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; $('installRow').style.display = 'flex'; });
 $('installBtn').onclick = () => deferred?.prompt();
-if ('serviceWorker' in navigator && !inTG) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && !inTG) navigator.serviceWorker.register('sw.js?v=20261121c').catch(() => {});
 
-function gate(title, text) { $('gateT').textContent = title; $('gateP').innerHTML = text; $('gateA').href = 'https://t.me/' + CFG.BOT; $('gate').style.display = 'flex'; }
-(async function boot() {
-  if (!window.crypto?.subtle) return gate('Browser tidak didukung', 'Butuh HTTPS & browser modern.');
-  let k = localStorage.getItem('loki_key');
-  if (!k && inTG) { hero(); setDot(''); try { k = await pair(); localStorage.setItem('loki_key', k); } catch (e) { return gate('Gagal menyambung', esc(e.message)); } }
-  if (!k) return gate('Buka lewat Telegram', 'Biar aman, Loki cuma bisa dibuka pemiliknya. Buka bot di Telegram lalu ketuk <b>Buka Loki</b>, atau kirim <b>/app</b> lalu pilih <b>Pasang di HP</b>.');
-  await useKey(k); hero(); subscribe();
-  setTimeout(() => { if (!gotState) { setDot('err'); const p = document.createElement('div'); p.className = 'note'; p.style.margin = '20px'; p.textContent = 'Server Loki belum menjawab… kalau lama, mungkin lagi offline. Chat Telegram tetap bisa dipakai.'; list.append(p); } }, 15000);
-})();
+function showBanner(kind, text) {
+  const b = $('banner'), t = $('bannerT'), r = $('bannerRetry');
+  if (!b) return;
+  b.className = 'banner ' + (kind || '');
+  b.style.display = (kind === 'ok') ? 'none' : 'flex';
+  if (t) t.textContent = text || 'Menyambungkan…';
+  if (r) r.hidden = kind !== 'err';
+  setDot(kind === 'ok' ? 'on' : kind === 'err' ? 'err' : '');
+  onInput();
+}
+function setReady(ok) { ready = !!ok; if (ok) showBanner('ok'); onInput(); }
+$('bannerRetry').onclick = () => boot(true);
+function gate(title, text, retry) {
+  $('gateT').textContent = title; $('gateP').innerHTML = text;
+  $('gateA').href = 'https://t.me/' + CFG.BOT; $('gate').style.display = 'flex';
+  if (retry) { showBanner('err', title); }
+}
+async function boot(isRetry) {
+  try {
+    setReady(false); showBanner('', 'Menyambungkan…');
+    if (isRetry) { $('gate').style.display = 'none'; KEY = UP = DOWN = null; if (es) { try { es.close(); } catch (e) {} es = null; } }
+    if (!window.crypto?.subtle) return gate('Browser tidak didukung', 'Butuh HTTPS & browser modern.', true);
+    let k = await loadStoredKey();
+    if (k) {
+      try { await useKey(k); }
+      catch (e) { console.warn('stored key unusable', e); clearStoredKey(); KEY = null; k = null; }
+    }
+    if (!k && inTG) {
+      hero(); showBanner('', 'Menyambungkan ke Loki…');
+      let last;
+      for (let i = 1; i <= 3; i++) {
+        showBanner('', i === 1 ? 'Menyambungkan ke Loki…' : 'Mencoba lagi (' + i + '/3)…');
+        try { k = await pair(); break; } catch (e) { last = e; }
+      }
+      if (!k) return gate('Gagal menyambung', 'Loki tidak merespons. Pastikan botnya jalan, lalu ketuk <b>Coba lagi</b>.<br><br><i>' + esc(last && last.message || '') + '</i>', true);
+      saveStoredKey(k);
+    }
+    if (!k) return gate('Buka lewat Telegram', 'Biar aman, Loki cuma bisa dibuka pemiliknya. Buka bot di Telegram lalu ketuk <b>Buka Loki</b>, atau kirim <b>/app</b> lalu pilih <b>Pasang di HP</b>.', false);
+    if (!isCryptoKey(KEY)) await useKey(k);
+    if (!isCryptoKey(KEY)) throw new Error('Kunci enkripsi gagal disiapkan di browser ini.');
+    hero(); subscribe();
+    // Enable sending only after the key is a real CryptoKey (state can arrive a moment later)
+    setReady(true);
+    showBanner('', 'Tersambung. Menunggu data…');
+    setTimeout(() => { if (!gotState) showBanner('err', 'Server Loki belum menjawab. Chat Telegram tetap bisa dipakai.'); }, 15000);
+  } catch (e) {
+    setReady(false);
+    gate('Gagal menyambung', esc(e && e.message || e), true);
+  }
+}
+boot();
 })();
 </script>
 </body>
