@@ -203,7 +203,7 @@ async function pair() {
 }
 
 // ---------- UI state
-let ST = { threads: [], facts: [], reminders: [], history: [], settings: {} }, busy = false, pending = {}, attach = null, gotState = false;
+let ST = { threads: [], facts: [], reminders: [], history: [], settings: {} }, wantRender = true, busy = false, pending = {}, attach = null, gotState = false;
 const list = $('list'), msgs = $('msgs');
 const md = s => { const h = DOMPurify.sanitize(marked.parse(s || '', { breaks: true, gfm: true }), { ADD_ATTR: ['target'] }); const d = document.createElement('div'); d.innerHTML = h;
   d.querySelectorAll('pre code').forEach(c => { try { hljs.highlightElement(c); } catch (e) {} const b = document.createElement('button'); b.className = 'copy'; b.textContent = 'Salin'; b.onclick = () => { navigator.clipboard?.writeText(c.innerText); b.textContent = 'Tersalin'; setTimeout(() => b.textContent = 'Salin', 1200); }; c.parentElement.append(b); });
@@ -232,7 +232,7 @@ function renderSide() {
   const cur = ST.current; $('bname').textContent = ST.name || 'Loki';
   const t = ST.threads.find(x => x.id === cur); $('title').textContent = t ? t.title : 'Loki';
   $('threads').innerHTML = ST.threads.map(x => `<div class="th ${x.id === cur ? 'on' : ''}" data-id="${x.id}"><span>${esc(x.title)}</span><button class="x" data-del="${x.id}" title="Hapus">✕</button></div>`).join('') || '<div class="empty-s">Belum ada</div>';
-  $('threads').querySelectorAll('.th').forEach(el => el.onclick = e => { if (e.target.dataset.del) { if (confirm('Hapus obrolan ini?')) send({ t: 'thread_delete', id: +e.target.dataset.del }); return; } send({ t: 'thread_switch', id: +el.dataset.id }); closeSide(); });
+  $('threads').querySelectorAll('.th').forEach(el => el.onclick = e => { if (e.target.dataset.del) { if (confirm('Hapus obrolan ini?')) send({ t: 'thread_delete', id: +e.target.dataset.del }); return; } wantRender = true; send({ t: 'thread_switch', id: +el.dataset.id }); closeSide(); });
   $('facts').innerHTML = ST.facts.map(f => `<div class="card"><span>${esc(f.fact)}</span><button class="mini" data-f="${f.id}">✕</button></div>`).join('') || '<div class="empty-s">Belum ada</div>';
   $('facts').querySelectorAll('[data-f]').forEach(b => b.onclick = () => send({ t: 'fact_del', id: +b.dataset.f }));
   $('rems').innerHTML = ST.reminders.map(r => `<div class="card"><span>${esc(r.message.slice(0, 120))}<small>${r.kind === 'task' ? '🤖 tugas' : '🔔 pesan'} · ${r.due}${r.recur ? ' · ' + esc(r.recur) : ''}${r.paused ? ' · ⏸ dijeda' : ''}</small></span>${r.recur ? `<button class="mini" data-p="${r.id}" data-v="${r.paused ? 0 : 1}" title="${r.paused ? 'Lanjut' : 'Jeda'}">${r.paused ? '▶' : '⏸'}</button>` : ''}<button class="mini" data-r="${r.id}">✕</button></div>`).join('') || '<div class="empty-s">Belum ada</div>';
@@ -257,7 +257,7 @@ function approval(m) {
   host.append(c); tg?.HapticFeedback?.notificationOccurred('warning'); scroll();
 }
 async function onEvent(m) {
-  if (m.t === 'state') { const first = !gotState; gotState = true; const switched = ST.current !== m.current; ST = m; renderSide(); if (first || switched) renderHistory(); setDot('on'); }
+  if (m.t === 'state') { gotState = true; const switched = ST.current !== m.current; ST = m; renderSide(); if (wantRender || (switched && !busy)) { wantRender = false; renderHistory(); } setDot('on'); }
   else if (m.t === 'progress') { const el = list.querySelector(`.msg.bot[data-rid="${m.rid}"] .pt`); if (el) el.textContent = m.text; }
   else if (m.t === 'transcript') { const me = [...list.querySelectorAll('.msg.me .b')].pop(); if (me) me.textContent = '🎙️ ' + m.text; }
   else if (m.t === 'reply') { addBot(m.text, m.rid, true); if (m.tools?.length) { const b = list.querySelector(`.msg.bot[data-rid="${m.rid}"] .b`); const d = document.createElement('div'); d.className = 'tools'; d.textContent = '🛠 ' + [...new Set(m.tools)].join(' · '); b.append(d); } done(m.rid); }
@@ -309,7 +309,7 @@ $('mic').onclick = async () => {
 // sidebar & settings
 const openSide = () => $('app').classList.add('open'), closeSide = () => $('app').classList.remove('open');
 $('menuBtn').onclick = openSide; $('closeSide').onclick = closeSide; $('scrim').onclick = closeSide;
-const newChat = () => { gotState = false; send({ t: 'thread_new' }); closeSide(); hero(); $('title').textContent = 'Obrolan baru'; const again = n => setTimeout(() => { if (!gotState && n) { send({ t: 'hello' }); again(n - 1); } }, 5000); again(3); };
+const newChat = () => { gotState = false; wantRender = true; send({ t: 'thread_new' }); closeSide(); hero(); $('title').textContent = 'Obrolan baru'; const again = n => setTimeout(() => { if (!gotState && n) { send({ t: 'hello' }); again(n - 1); } }, 5000); again(3); };
 $('newChat').onclick = newChat; $('newChat2').onclick = newChat;
 $('sVoice').onchange = () => send({ t: 'setting', key: 'voice', value: $('sVoice').value });
 $('sMem').onchange = () => send({ t: 'setting', key: 'auto_memory', value: $('sMem').value });
