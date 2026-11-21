@@ -9,7 +9,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>Loki</title>
-<link rel="manifest" href="manifest.json?v=20261121d">
+<link rel="manifest" href="manifest.json?v=20261121e">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -17,7 +17,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/styles/github-dark.min.css">
-<script src="config.js?v=20261121d"></script>
+<script src="config.js?v=20261121e"></script>
 <style>
 :root{--bg:#000;--side:#0c0c0e;--panel:#141417;--bubble:#1d1d21;--line:#232328;--text:#f1f1f3;--muted:#8d8d97;--accent:#fff;--blue:#7c5cff;--ok:#2ecc71;--bad:#ff5d5d}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -129,6 +129,9 @@ header .title{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-ove
       <div class="sec">Obrolan</div><div id="threads"></div>
       <div class="sec">🧠 Memori</div><div id="facts"></div>
       <div class="sec">🔁 Rutinitas & pengingat</div><div id="rems"></div>
+      <div class="sec">🔔 Pantauan</div><div id="watches"></div>
+      <div class="sec">📝 Tugas</div><div id="todos"></div>
+      <div class="sec">📁 File & unduhan</div><div id="files"></div>
       <div class="sec">⚙️ Pengaturan</div>
       <div class="set">Balasan suara (Telegram)<select id="sVoice"><option value="auto">auto</option><option value="on">selalu</option><option value="off">mati</option></select></div>
       <div class="set">Ingat otomatis<select id="sMem"><option value="1">nyala</option><option value="0">mati</option></select></div>
@@ -282,7 +285,7 @@ function setDot(c) { $('dot').className = 'dot ' + c; }
 
 function hero() {
   list.innerHTML = `<div class="hero"><div class="logo" style="width:52px;height:52px;margin:auto;font-size:24px">L</div><h1>Ada yang bisa aku bantu?</h1><p>Aku bisa cari info, buka web, bikin file & gambar, ingetin kamu, dan jalanin tugas rutin.</p>
-  <div class="sugs">${[['Berita hari ini', 'Rangkum 5 berita utama Indonesia hari ini'], ['Cek harga', 'Harga bitcoin dan emas antam sekarang berapa?'], ['Bikin gambar', 'Bikin gambar kucing astronot gaya kartun'], ['Rutinitas', 'Tiap jam 7 pagi kirim cuaca Makassar dan berita teknologi']].map(([a, b]) => `<div class="sug" data-q="${esc(b)}"><b>${a}</b>${esc(b)}</div>`).join('')}</div></div>`;
+  <div class="sugs">${[['Berita hari ini', 'Rangkum 5 berita utama Indonesia hari ini'], ['Cek harga', 'Harga bitcoin dan emas antam sekarang berapa?'], ['Bikin video', 'Buatkan video pendek tentang manfaat minum air'], ['Riset', 'Riset mendalam: apa itu AI agent, tulis laporan PDF'], ['Pantau', 'Kabarin kalau ada berita tentang teknologi Indonesia']].map(([a, b]) => `<div class="sug" data-q="${esc(b)}"><b>${a}</b>${esc(b)}</div>`).join('')}</div></div>`;
   list.querySelectorAll('.sug').forEach(x => x.onclick = () => { $('t').value = x.dataset.q; onInput(); submit(); });
 }
 function addMe(text, img) { list.querySelector('.hero')?.remove(); const m = document.createElement('div'); m.className = 'msg me'; m.innerHTML = `<div class="b">${img ? `<img src="${img}" style="max-width:220px;border-radius:12px;display:block;margin-bottom:6px">` : ''}${esc(text)}</div>`; list.append(m); scroll(); }
@@ -306,6 +309,17 @@ function renderSide() {
   $('rems').innerHTML = ST.reminders.map(r => `<div class="card"><span>${esc(r.message.slice(0, 120))}<small>${r.kind === 'task' ? '🤖 tugas' : '🔔 pesan'} · ${r.due}${r.recur ? ' · ' + esc(r.recur) : ''}${r.paused ? ' · ⏸ dijeda' : ''}</small></span>${r.recur ? `<button class="mini" data-p="${r.id}" data-v="${r.paused ? 0 : 1}" title="${r.paused ? 'Lanjut' : 'Jeda'}">${r.paused ? '▶' : '⏸'}</button>` : ''}<button class="mini" data-r="${r.id}">✕</button></div>`).join('') || '<div class="empty-s">Belum ada</div>';
   $('rems').querySelectorAll('[data-r]').forEach(b => b.onclick = () => send({ t: 'rem_del', id: +b.dataset.r }));
   $('rems').querySelectorAll('[data-p]').forEach(b => b.onclick = () => send({ t: 'rem_pause', id: +b.dataset.p, pause: b.dataset.v === '1' }));
+  const watches = ST.watches || [];
+  $('watches').innerHTML = watches.map(w => `<div class="card"><span>${esc(w.title || w.target)}<small>${esc(w.kind)} · tiap ${Math.max(1, Math.round((w.every_sec||3600)/60))}m${w.paused ? ' · ⏸' : ''}${w.last_value ? ' · ' + esc(String(w.last_value).slice(0,80)) : ''}</small></span><button class="mini" data-wp="${w.id}" data-v="${w.paused ? 0 : 1}">${w.paused ? '▶' : '⏸'}</button><button class="mini" data-wd="${w.id}">✕</button></div>`).join('') || '<div class="empty-s">Bilang “kabarin kalau …”</div>';
+  $('watches').querySelectorAll('[data-wd]').forEach(b => b.onclick = () => send({ t: 'watch_del', id: +b.dataset.wd }));
+  $('watches').querySelectorAll('[data-wp]').forEach(b => b.onclick = () => send({ t: 'watch_pause', id: +b.dataset.wp, paused: b.dataset.v === '1' }));
+  const todos = ST.todos || [];
+  $('todos').innerHTML = todos.map(t => `<div class="card"><span>${t.done ? '✅' : '☐'} ${esc(t.title)}</span><button class="mini" data-td="${t.id}" data-v="${t.done ? 0 : 1}">${t.done ? '↩' : '✓'}</button><button class="mini" data-tx="${t.id}">✕</button></div>`).join('') || '<div class="empty-s">Belum ada</div>';
+  $('todos').querySelectorAll('[data-td]').forEach(b => b.onclick = () => send({ t: 'todo_done', id: +b.dataset.td, done: b.dataset.v === '1' }));
+  $('todos').querySelectorAll('[data-tx]').forEach(b => b.onclick = () => send({ t: 'todo_del', id: +b.dataset.tx }));
+  const files = ST.files || [];
+  $('files').innerHTML = files.slice(0, 30).map(f => `<div class="card"><span>📎 ${esc(f.name)}<small>${esc(f.folder)} · ${(f.size/1024).toFixed(0)} KB</small></span><button class="mini" data-gf="${esc(f.path)}">⬇️</button></div>`).join('') || '<div class="empty-s">Belum ada file</div>';
+  $('files').querySelectorAll('[data-gf]').forEach(b => b.onclick = () => send({ t: 'get_file', path: b.dataset.gf }));
   const s = ST.settings || {}; $('sVoice').value = s.voice || 'auto'; $('sMem').value = s.auto_memory || '1';
   $('sBrief').value = s.briefing && s.briefing !== 'off' ? 'on' : 'off'; if (s.briefing && s.briefing !== 'off') $('sBriefT').value = s.briefing.padStart(5, '0');
 }
@@ -394,7 +408,7 @@ $('logout').onclick = () => { if (confirm('Lupakan kunci Loki di perangkat ini?'
 $('lightbox').onclick = () => $('lightbox').style.display = 'none';
 let deferred = null; window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; $('installRow').style.display = 'flex'; });
 $('installBtn').onclick = () => deferred?.prompt();
-if ('serviceWorker' in navigator && !inTG) navigator.serviceWorker.register('sw.js?v=20261121d').catch(() => {});
+if ('serviceWorker' in navigator && !inTG) navigator.serviceWorker.register('sw.js?v=20261121e').catch(() => {});
 
 function showBanner(kind, text) {
   const b = $('banner'), t = $('bannerT'), r = $('bannerRetry');
